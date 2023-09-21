@@ -22,9 +22,6 @@ def get_grad_mask(size=512):
     return grad_mask
 
 
-grad_mask = (get_grad_mask(256) * 3).clip(0, 1)
-
-
 def landmark_smoothing(landmarks):
     sm_landmarks = gaussian_filter1d(landmarks, sigma=1.0, axis=0)
     sm_landmarks = np.reshape(sm_landmarks, (-1, 68, 2))
@@ -91,26 +88,7 @@ def get_convexhull_mask(batch_lmk, dilate_iter=15, image_size=256, device="cuda"
     for lmk in batch_lmk:
         kernel = np.ones((3, 3), np.uint8)
         canvas = np.zeros((image_size, image_size, 3)).astype(np.uint8)
-        points = np.array(
-            [
-                lmk[1],
-                lmk[2],
-                lmk[3],
-                lmk[4],
-                lmk[5],
-                lmk[6],
-                lmk[7],
-                lmk[8],
-                lmk[9],
-                lmk[10],
-                lmk[11],
-                lmk[12],
-                lmk[13],
-                lmk[14],
-                lmk[15],
-            ],
-            np.int32,
-        )
+        points = np.array(lmk[1:15], np.int32)
         skin_mask = cv2.fillConvexPoly(canvas, points=points, color=(1, 1, 1))
         dilation_skin_mask = cv2.dilate(skin_mask, kernel, iterations=dilate_iter)
         masks.append(np.expand_dims(dilation_skin_mask.transpose(2, 0, 1), axis=0))

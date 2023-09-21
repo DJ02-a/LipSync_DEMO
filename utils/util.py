@@ -3,11 +3,23 @@ import math
 import os
 
 import cv2
+import librosa
 import numpy as np
 import torch
 
+from .infer_util import get_grad_mask
 
+
+# SETTTINGS
 def setting_pp_init(opts):
+    opts.video_name = os.path.basename(opts.video_file_path).split(".")[0]
+    opts.video_path = opts.video_file_path
+    opts.pp_save_path = os.path.join(
+        opts.pp_save_root,
+        opts.type,
+        f"{opts.video_name}",
+    )
+
     if opts.type == "source":
         opts.workflow = {
             "sync_offset": False,
@@ -15,7 +27,6 @@ def setting_pp_init(opts):
             "face": True,
             "deca_params": True,
             "flame_params": False,
-            "audio_huberts_feature": False,
         }
     else:
         opts.workflow = {
@@ -24,23 +35,22 @@ def setting_pp_init(opts):
             "face": True,
             "deca_params": True,
             "flame_params": True,
-            "audio_huberts_feature": True,
         }
 
-    opts.frame_save_path = os.path.join(opts.clip_save_path, "frames")
-    opts.face_save_path = os.path.join(opts.clip_save_path, "faces")
+    opts.frame_save_path = os.path.join(opts.pp_save_path, "frames")
+    opts.face_save_path = os.path.join(opts.pp_save_path, "faces")
     opts.trans_landmark2d_save_path = os.path.join(
-        opts.clip_save_path, "trans_landmark2d.npy"
+        opts.pp_save_path, "trans_landmark2d.npy"
     )
-    opts.face_bool_save_path = os.path.join(opts.clip_save_path, "face_bool.npy")
-    opts.lmks_save_path = os.path.join(opts.clip_save_path, "lmks_106.npy")
-    opts.tfm_inv_save_path = os.path.join(opts.clip_save_path, "tfm_inv.npy")
-    opts.deca_param_save_path = os.path.join(opts.clip_save_path, "deca_params.npy")
+    opts.face_bool_save_path = os.path.join(opts.pp_save_path, "face_bool.npy")
+    opts.lmks_save_path = os.path.join(opts.pp_save_path, "lmks_106.npy")
+    opts.tfm_inv_save_path = os.path.join(opts.pp_save_path, "tfm_inv.npy")
+    opts.deca_param_save_path = os.path.join(opts.pp_save_path, "deca_params.npy")
 
-    opts.audio_save_path = os.path.join(opts.clip_save_path, "audio.wav")
-    opts.huberts_save_path = os.path.join(opts.clip_save_path, "huberts_768.npy")
+    opts.audio_save_path = os.path.join(opts.pp_save_path, "audio.wav")
+    opts.mel_save_path = os.path.join(opts.pp_save_path, "mel.npy")
 
-    os.makedirs(opts.clip_save_path, exist_ok=True)
+    os.makedirs(opts.pp_save_path, exist_ok=True)
     os.makedirs(opts.frame_save_path, exist_ok=True)
     os.makedirs(opts.face_save_path, exist_ok=True)
 
@@ -121,8 +131,8 @@ def setting_main_init(
     opts.driving_deca_params_path = os.path.join(
         opts.driving_clip_path, opts.driving_clip_crop_name, "deca_params.npy"
     )
-    opts.driving_huberts_path = os.path.join(
-        opts.driving_clip_path, opts.driving_clip_crop_name, "huberts_768.npy"
+    opts.driving_mel_path = os.path.join(
+        opts.driving_clip_path, opts.driving_clip_crop_name, "mel.npy"
     )
     opts.driving_trans_landmark2d_path = os.path.join(
         opts.driving_clip_path, opts.driving_clip_crop_name, "trans_landmark2d.npy"
@@ -162,77 +172,78 @@ def setting_main_init(
     return opts
 
 
-def setting_batch_data(opts):
-    # need
-    # source : original frame, faces, deca, tfm_inv
-    source_original_frame_list = sorted(
-        glob.glob(os.path.join(opts.source_original_frame_path, "*.*"))
-    )
-    source_face_list = sorted(glob.glob(os.path.join(opts.source_faces_path, "*.*")))
-    source_deca_list = np.load(opts.source_deca_params_path, allow_pickle=True)
-    source_tfm_inv_list = np.load(opts.source_tfm_inv_path, allow_pickle=True)
+# def setting_batch_data(opts):
+#     # need
+#     # source : original frame, faces, deca, tfm_inv
+#     source_original_frame_list = sorted(
+#         glob.glob(os.path.join(opts.source_original_frame_path, "*.*"))
+#     )
+#     source_face_list = sorted(glob.glob(os.path.join(opts.source_faces_path, "*.*")))
+#     source_deca_list = np.load(opts.source_deca_params_path, allow_pickle=True)
+#     source_tfm_inv_list = np.load(opts.source_tfm_inv_path, allow_pickle=True)
 
-    # driving : huberts, faces, deca, landmarks2d_points
-    driving_face_list = sorted(glob.glob(os.path.join(opts.driving_face_path, "*.*")))
-    driving_deca_param_list = np.load(opts.driving_deca_params_path, allow_pickle=True)
-    driving_huberts_list = np.load(opts.driving_huberts_path, allow_pickle=True)
-    driving_trans_landmark2d_list = np.load(
-        opts.driving_trans_landmark2d_path, allow_pickle=True
-    )
-    import pdb
+#     # driving : mel, faces, deca, landmarks2d_points
+#     driving_face_list = sorted(glob.glob(os.path.join(opts.driving_face_path, "*.*")))
+#     driving_deca_param_list = np.load(opts.driving_deca_params_path, allow_pickle=True)
+#     driving_mel = np.load(opts.driving_mel_path, allow_pickle=True)
+#     driving_trans_landmark2d_list = np.load(
+#         opts.driving_trans_landmark2d_path, allow_pickle=True
+#     )
+#     import pdb
 
-    frame_len = int(opts.min_duration * opts.fps)
+#     frame_len = int(opts.min_duration * opts.fps)
 
-    (
-        source_original_frame_batches,
-        source_faces_batches,
-        source_deca_batches,
-        source_tfm_inv_batches,
-    ) = ([], [], [], [])
-    (
-        driving_faces_batches,
-        driving_deca_param_batches,
-        driving_huberts_batches,
-        driving_trans_landmark2d_batches,
-    ) = ([], [], [], [])
-    image_divide_indexes = list(range(0, frame_len, 5))
-    for image_start_index in image_divide_indexes:
-        image_end_index = image_start_index + opts.frame_amount
-        hubert_start_index = image_start_index * 2
-        hubert_end_index = hubert_start_index + opts.hubert_amount
+#     (
+#         source_original_frame_batches,
+#         source_faces_batches,
+#         source_deca_batches,
+#         source_tfm_inv_batches,
+#     ) = ([], [], [], [])
+#     (
+#         driving_faces_batches,
+#         driving_deca_param_batches,
+#         driving_mel_batches,
+#         driving_trans_landmark2d_batches,
+#     ) = ([], [], [], [])
+#     image_divide_indexes = list(range(0, frame_len, 5))
+#     for image_start_index in image_divide_indexes:
+#         image_end_index = image_start_index + opts.frame_amount
+#         hubert_start_index = image_start_index * 2
+#         hubert_end_index = hubert_start_index + opts.hubert_amount
 
-        # source
-        source_original_frame_batches.append(
-            source_original_frame_list[image_start_index:image_end_index]
-        )
-        source_faces_batches.append(source_face_list[image_start_index:image_end_index])
-        source_deca_batches.append(source_deca_list[image_start_index:image_end_index])
-        source_tfm_inv_batches.append(
-            source_tfm_inv_list[image_start_index:image_end_index]
-        )
+#         # source
+#         source_original_frame_batches.append(
+#             source_original_frame_list[image_start_index:image_end_index]
+#         )
+#         source_faces_batches.append(source_face_list[image_start_index:image_end_index])
+#         source_deca_batches.append(source_deca_list[image_start_index:image_end_index])
+#         source_tfm_inv_batches.append(
+#             source_tfm_inv_list[image_start_index:image_end_index]
+#         )
 
-        # driving
-        driving_faces_batches.append(
-            driving_face_list[image_start_index:image_end_index]
-        )
-        driving_deca_param_batches.append(
-            driving_deca_param_list[image_start_index:image_end_index]
-        )
-        driving_trans_landmark2d_batches.append(
-            driving_trans_landmark2d_list[image_start_index:image_end_index]
-        )
-        driving_huberts_batches.append(
-            driving_deca_param_list[hubert_start_index:hubert_end_index]
-        )
-        pdb.set_trace()
-        # TODO : 이거 5개씩 나눈거 체크 해야됨.
-    return
+#         # driving
+#         driving_faces_batches.append(
+#             driving_face_list[image_start_index:image_end_index]
+#         )
+#         driving_deca_param_batches.append(
+#             driving_deca_param_list[image_start_index:image_end_index]
+#         )
+#         driving_trans_landmark2d_batches.append(
+#             driving_trans_landmark2d_list[image_start_index:image_end_index]
+#         )
+#         driving_mel_batches.append(
+#             driving_deca_param_list[hubert_start_index:hubert_end_index]
+#         )
+#         pdb.set_trace()
+#         # TODO : 이거 5개씩 나눈거 체크 해야됨.
+#     return
 
 
 def get_vis(frame, face, lmk_img, mask_img, FA):
     size = frame.shape
     FA_dict = FA.get_face(frame)
     tfm_inv = FA_dict["tfm_inv"]
+    grad_mask = (get_grad_mask(256) * 3).clip(0, 1)
 
     # vis
     lmk_vis = (face * (1 - lmk_img) + face * lmk_img * 0.1) + lmk_img * 255 * 0.9
@@ -290,3 +301,38 @@ def putText_lmk_dist(text, lmks_img, lmks):
     # _lmks_img = cv2.putText(_lmks_img, f"x : {str(int(math.dist(lmks[54],lmks[48])))}", (int(15),int(125)), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 3)
     # _lmks_img = cv2.putText(_lmks_img, f"y : {str(int(math.dist(lmks[57],lmks[51])))}", (int(15),int(205)), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,255), 3)
     return _lmks_img
+
+
+# audio pp
+def _amp_to_db(x):
+    min_level = np.exp(-100 / 20 * np.log(10))
+    return 20 * np.log10(np.maximum(min_level, x))
+
+
+def _normalize(S):
+    return np.clip((2 * 4) * ((S + 100) / 100) - 4, -4, 4)
+
+
+def _linear_to_mel(spectogram, sr=16000):
+    global _mel_basis
+    if _mel_basis is None:
+        _mel_basis = _build_mel_basis(sr)
+    return np.dot(_mel_basis, spectogram)
+
+
+def _build_mel_basis(sr=16000, n_fft=800, num_mels=80, fmin=55, fmax=7600):
+    assert 7600 <= sr // 2
+    return librosa.filters.mel(
+        sr=sr,
+        n_fft=n_fft,
+        n_mels=num_mels,
+        fmin=fmin,
+        fmax=fmax,
+    )
+
+
+def get_mel(audio, n_fft=800, sr=16000):
+    D = librosa.stft(y=audio, n_fft=n_fft, hop_length=200, win_length=800)
+    S = _amp_to_db(_linear_to_mel(np.abs(D), sr)) - 20
+    mel = _normalize(S)
+    return mel

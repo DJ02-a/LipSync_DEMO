@@ -8,11 +8,9 @@ import librosa
 import numpy as np
 import torch
 from innerverz import DECA, FaceAligner
-from moviepy.video.io.VideoFileClip import VideoFileClip
 from tqdm import tqdm
-from transformers import HubertModel, Wav2Vec2FeatureExtractor
 
-import utils.util as util
+from utils import infer_util, util
 
 # def check_offset(opts):
 #     return
@@ -51,10 +49,10 @@ def video_pp(opts, FA, DECA):
             file_name = os.path.basename(face_path)
             face = cv2.imread(face_path)
             image_dict = DECA.data_preprocess(face, lmks_106)
-            code_dict = DECA.encode(image_dict["image"][None, ...])
+            code_dict = DECA.encode(image_dict["image"])
 
             deca_file_names.append(file_name)
-            deca_tform_invs.append(image_dict["tform_inv"][None, ...])
+            deca_tform_invs.append(image_dict["tform_inv"])
             deca_code_dict_list.append(code_dict)
         np.save(opts.deca_param_save_path, np.array(deca_code_dict_list))
 
@@ -71,27 +69,10 @@ def video_pp(opts, FA, DECA):
     return
 
 
-def audio_pp(opts, wav2vec2_processor, hubert_model):
-    if opts.workflow["audio_huberts_feature"]:
-        command = f"ffmpeg -y -i {opts.video_path} -ac 1 -vn -acodec pcm_s16le -ar 16000 -ss {opts.start_sec} -to {opts.end_sec} {opts.audio_save_path}"
-        subprocess.call(command, shell=True, stdout=None)
-
-        audio_data, _ = librosa.load(opts.audio_save_path, sr=opts.sr)
-
-        # hubert
-        inputs = wav2vec2_processor(
-            audio_data, return_tensors="pt", padding="longest", sampling_rate=opts.sr
-        )
-        if len(audio_data) < 400:
-            inputs["input_values"] = torch.nn.functional.pad(
-                inputs["input_values"], (0, 400 - len(audio_data))
-            )
-        with torch.no_grad():
-            outputs = hubert_model(inputs["input_values"]).last_hidden_state
-        _outputs = outputs.squeeze(0).numpy()
-        np.save(opts.huberts_save_path, _outputs)
-
-    return
+def audio_pp(opts):
+    audio, _ = librosa.load(opts.video_path, sr=opts.sr)
+    mel = util.get_mel(audio)
+    np.save(opts.mel_save_path, mel)
 
 
 if __name__ == "__main__":
@@ -99,15 +80,8 @@ if __name__ == "__main__":
 
     # path options
     parser.add_argument("--type", type=str, default="driving")
-    parser.add_argument("--video_path", type=str, default="./assets/driving_videos")
-    parser.add_argument("--clip_save_root", type=str, default="./assets/driving_clips")
-    # parser.add_argument(
-    #     "--start_end_point",
-    #     nargs="+",
-    #     default=((10, 12), (11, 13)),
-    #     type=int,
-    #     help="the indices of transparent classes",
-    # )
+    parser.add_argument("--video_path", type=str, default="./assets/demo_videos")
+    parser.add_argument("--pp_save_root", type=str, default="./assets/demo_pp")
 
     # video options
     parser.add_argument("--fps", type=int, default=25)
@@ -121,14 +95,7 @@ if __name__ == "__main__":
     DC = DECA()
     FA_3D = FaceAligner(size=args.image_size)
 
-    print("Loading the Wav2Vec2 Processor...")
-    wav2vec2_processor = Wav2Vec2FeatureExtractor.from_pretrained(
-        "facebook/hubert-base-ls960"
-    )
-
-    print("Loading the HuBERT Model...")
-    hubert_model = HubertModel.from_pretrained("facebook/hubert-base-ls960")
-
+    # 일단 offset은 맞춘 동영상으로 가정
     # TODO : workflow
     # sync offset -> video pp / audio pp -> crop?(optional)
     # if args.workflow["sync_offset"]:
@@ -137,16 +104,12 @@ if __name__ == "__main__":
     #         os.system(
     #             f"ffmpeg -y -i {fname} -itsoffset {offset/args.fps} -i {fname} -vb 20M -map 0:v -map 1:a -r {str(args.fps)} sample.mp4"
     #         )
-    video_files = sorted(glob.glob(args.video_path + "/*.*"))
 
-    # 동영상은 이미 자른 상태여야 함
-    for video_file in zip(video_files, args.start_end_point):
-        args.video_name = os.path.basename(video_file).split(".")[0]
-        args.video_path = video_file
-        args.clip_save_path = os.path.join(
-            args.clip_save_root,
-            f"{args.video_name}",
-        )
+    # video_file_paths = sorted(glob.glob(args.video_path + "/*.*"))
+    video_file_paths = ["assets/demo_videos/Mrbang.mp4"]
+    for video_file_path in video_file_paths:
+        args.video_file_path = video_file_path
         args = util.setting_pp_init(args)
         video_pp(args, FA_3D, DC)
-        audio_pp(args, wav2vec2_processor, hubert_model)
+        if args.type == "driving":
+            audio_pp(args)
