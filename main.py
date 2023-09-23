@@ -5,8 +5,9 @@ import os
 import cv2
 import numpy as np
 from innerverz import DECA
-from package.LipSync import LipSyncer
 from tqdm import tqdm
+
+from package.LipSync import LipSyncer
 from utils import util, util_infer
 
 
@@ -109,7 +110,7 @@ if __name__ == "__main__":
     # lipsync model options
     parser.add_argument("--frame_amount", type=int, default=5)
     parser.add_argument("--hubert_amount", type=int, default=9)
-    parser.add_argument("--ckpt_file", type=str, default="Larissa_4k.pt")
+    parser.add_argument("--ckpt_file", type=str, default="Taylor_4k.pt")
     parser.add_argument("--skip_connection", type=bool, default=False)
     parser.add_argument("--ref_input", type=bool, default=False)
 
@@ -125,15 +126,17 @@ if __name__ == "__main__":
     # must file type : mp4
     # driving_clip_names = sorted(os.listdir(args.pp_path))
     driving_clip_names = [
-        "Larissa_sync_1_crop",
-        "Larissa_sync_2_crop",
-        "Larissa_sync_3_crop",
+        "Taylor_sync_1",
+        "Taylor_sync_2",
+        "Taylor_sync_3",
+        "Taylor_sync_4",
     ]
     # source_clip_names = sorted(os.listdir(args.pp_path))
     source_clip_names = [
-        "Larissa_sync_1_crop",
-        "Larissa_sync_2_crop",
-        "Larissa_sync_3_crop",
+        "Taylor_sync_1",
+        "Taylor_sync_2",
+        "Taylor_sync_3",
+        "Taylor_sync_4",
     ]
     for driving_clip_crop_name in driving_clip_names:
         for source_clip_crop_name in source_clip_names:

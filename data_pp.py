@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from innerverz import DECA, FaceAligner
 from tqdm import tqdm
+
 from utils import util, util_infer
 
 # def check_offset(opts):
@@ -48,7 +49,6 @@ def video_pp(opts, FA, DECA):
 
         image_dict = DECA.data_preprocess(face, lmks)
         code_dict = DECA.encode(image_dict["image"])
-        code_dict["tform_inv"] = image_dict["tform_inv"]
 
         _, _, _, _, _, trans_landmarks3ds, _, _ = DC.get_lmks_from_params(
             code_dict, tform_invs=image_dict["tform_inv"]
@@ -65,6 +65,7 @@ def video_pp(opts, FA, DECA):
             code_dict, lmks_ts, image_dict["tform_inv"], num_iter=10, lmk_type="3D"
         )
 
+        optimized_code_dict["tform_inv"] = image_dict["tform_inv"]
         deca_code_dict_list.append(optimized_code_dict)
     np.save(opts.deca_param_save_path, np.array(deca_code_dict_list))
 
