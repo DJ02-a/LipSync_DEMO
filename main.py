@@ -5,9 +5,8 @@ import os
 import cv2
 import numpy as np
 from innerverz import DECA
-from tqdm import tqdm
-
 from package.LipSync import LipSyncer
+from tqdm import tqdm
 from utils import util, util_infer
 
 
@@ -95,7 +94,7 @@ if __name__ == "__main__":
     # inference options
     parser.add_argument("--pp_path", type=str, default="./assets/demo_crop_pp")
     parser.add_argument("--video_path", type=str, default="./assets/demo_crop_videos")
-    parser.add_argument("--save_root", type=str, default="./fullD_results_demo_crop/")
+    parser.add_argument("--save_root", type=str, default="./peronsal_4k/")
 
     # video options
     parser.add_argument("--sv_to", type=int, default=0)
@@ -110,7 +109,7 @@ if __name__ == "__main__":
     # lipsync model options
     parser.add_argument("--frame_amount", type=int, default=5)
     parser.add_argument("--hubert_amount", type=int, default=9)
-    parser.add_argument("--ckpt_file", type=str, default="sparse_fullD_185k.pt")
+    parser.add_argument("--ckpt_file", type=str, default="Larissa_4k.pt")
     parser.add_argument("--skip_connection", type=bool, default=False)
     parser.add_argument("--ref_input", type=bool, default=False)
 
@@ -124,10 +123,22 @@ if __name__ == "__main__":
     DC = DECA()
 
     # must file type : mp4
-    driving_clip_names = sorted(os.listdir(args.pp_path))
-    source_clip_names = sorted(os.listdir(args.pp_path))
+    # driving_clip_names = sorted(os.listdir(args.pp_path))
+    driving_clip_names = [
+        "Larissa_sync_1_crop",
+        "Larissa_sync_2_crop",
+        "Larissa_sync_3_crop",
+    ]
+    # source_clip_names = sorted(os.listdir(args.pp_path))
+    source_clip_names = [
+        "Larissa_sync_1_crop",
+        "Larissa_sync_2_crop",
+        "Larissa_sync_3_crop",
+    ]
     for driving_clip_crop_name in driving_clip_names:
         for source_clip_crop_name in source_clip_names:
+            if driving_clip_names == source_clip_crop_name:
+                continue
             args.dv_name, args.sv_name = driving_clip_crop_name, source_clip_crop_name
 
             args.save_path = os.path.join(
