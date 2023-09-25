@@ -43,17 +43,19 @@ def run(opts, generators, DC):
         sv_lmks = util_infer.get_deca_lmks(DC, sv_decas)
         lipsync_lmks = util_infer.get_deca_lmks(DC, lipsync_decas)
 
+        lipsync_sm_lmks = util_infer.landmark_smoothing(lipsync_lmks)
+
         # get convexhull
         sv_masks = util_infer.get_convexhull_mask(
             sv_lmks, dilate_iter=opts.dilate_iter, device="cpu"
         )
         lipsync_masks = util_infer.get_convexhull_mask(
-            lipsync_lmks, dilate_iter=opts.dilate_iter, device="cpu"
+            lipsync_sm_lmks, dilate_iter=opts.dilate_iter, device="cpu"
         )
         mask = sv_masks | lipsync_masks
         dilate_mask = util.get_blend_mask(np.array(mask.permute([0, 2, 3, 1])))
         lipsync_lmks_vis = util_infer.get_lmk_imgs(
-            lipsync_lmks, types="sparse", device="cpu"
+            lipsync_sm_lmks, types="sparse", device="cpu"
         )
         input_images = sv_face_batch * (1 - mask) + mask * lipsync_lmks_vis
 
@@ -93,9 +95,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # inference options
-    parser.add_argument("--pp_path", type=str, default="./assets/demo_crop_pp")
+    parser.add_argument("--driving_pp_path", type=str, default="./assets/demo_crop_pp")
+    parser.add_argument("--source_pp_path", type=str, default="./assets/demo_crop_pp")
     parser.add_argument("--video_path", type=str, default="./assets/demo_crop_videos")
-    parser.add_argument("--save_root", type=str, default="./peronsal_4k/")
+    parser.add_argument(
+        "--save_root",
+        type=str,
+        default="./results/Sep25_Larissa_personal/",
+        help="driving video folder path",
+    )
 
     # video options
     parser.add_argument("--sv_to", type=int, default=0)
@@ -110,7 +118,7 @@ if __name__ == "__main__":
     # lipsync model options
     parser.add_argument("--frame_amount", type=int, default=5)
     parser.add_argument("--hubert_amount", type=int, default=9)
-    parser.add_argument("--ckpt_file", type=str, default="Taylor_4k.pt")
+    parser.add_argument("--ckpt_file", type=str, default="Taylor_w025_2k.pt")
     parser.add_argument("--skip_connection", type=bool, default=False)
     parser.add_argument("--ref_input", type=bool, default=False)
 
@@ -126,58 +134,66 @@ if __name__ == "__main__":
     # must file type : mp4
     # driving_clip_names = sorted(os.listdir(args.pp_path))
     driving_clip_names = [
-        "Taylor_sync_1",
-        "Taylor_sync_2",
-        "Taylor_sync_3",
-        "Taylor_sync_4",
+        "Larissa_sync_1_crop",
+        "Larissa_sync_2_crop",
+        "Larissa_sync_3_crop",
     ]
     # source_clip_names = sorted(os.listdir(args.pp_path))
     source_clip_names = [
-        "Taylor_sync_1",
-        "Taylor_sync_2",
-        "Taylor_sync_3",
-        "Taylor_sync_4",
+        "Larissa_sync_1_crop",
+        "Larissa_sync_2_crop",
+        "Larissa_sync_3_crop",
     ]
     for driving_clip_crop_name in driving_clip_names:
         for source_clip_crop_name in source_clip_names:
-            if driving_clip_names == source_clip_crop_name:
+            if driving_clip_crop_name == source_clip_crop_name:
                 continue
-            args.dv_name, args.sv_name = driving_clip_crop_name, source_clip_crop_name
+            try:
+                args.dv_name, args.sv_name = (
+                    driving_clip_crop_name,
+                    source_clip_crop_name,
+                )
 
-            args.save_path = os.path.join(
-                args.save_root, f"{source_clip_crop_name}_{driving_clip_crop_name}"
-            )
-            (
-                args.source_frame_paths,
-                args.source_face_paths,
-                args.source_deca_path,
-                args.source_face_bool_path,
-                _,
-                args.source_tfm_inv_path,
-            ) = util.get_video_info(args, source_clip_crop_name)
+                args.save_path = os.path.join(
+                    args.save_root, f"{source_clip_crop_name}_{driving_clip_crop_name}"
+                )
+                (
+                    args.source_frame_paths,
+                    args.source_face_paths,
+                    args.source_deca_path,
+                    args.source_face_bool_path,
+                    _,
+                    args.source_tfm_inv_path,
+                ) = util.get_video_info(
+                    args, args.source_pp_path, source_clip_crop_name
+                )
 
-            (
-                args.driving_frame_paths,
-                _,
-                args.driving_deca_path,
-                _,
-                args.driving_mel_path,
-                _,
-            ) = util.get_video_info(args, driving_clip_crop_name)
+                (
+                    args.driving_frame_paths,
+                    _,
+                    args.driving_deca_path,
+                    _,
+                    args.driving_mel_path,
+                    _,
+                ) = util.get_video_info(
+                    args, args.driving_pp_path, driving_clip_crop_name
+                )
 
-            (
-                source_deca_params,
-                lipsync_deca_params,
-            ) = util.get_lipsync_deca_param(args)
+                (
+                    source_deca_params,
+                    lipsync_deca_params,
+                ) = util.get_lipsync_deca_param(args)
 
-            min_duration = min(
-                len(args.source_frame_paths), len(args.driving_frame_paths)
-            )
-            generators = util.set_generators(
-                args, source_deca_params, lipsync_deca_params, min_duration
-            )
+                args.min_duration = min(
+                    len(args.source_frame_paths), len(args.driving_frame_paths)
+                )
+                generators = util.set_generators(
+                    args, source_deca_params, lipsync_deca_params, args.min_duration
+                )
 
-            results, inputs, tmp = run(args, generators, DC)
-            # min 필요.
-            save(args, results, inputs, tmp)
-            util.video_save(args)
+                results, inputs, tmp = run(args, generators, DC)
+                # min 필요.
+                save(args, results, inputs, tmp)
+                util.video_save(args)
+            except:
+                continue

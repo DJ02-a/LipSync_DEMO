@@ -55,16 +55,17 @@ def setting_pp_init(opts):
 # TODO : single mode
 def get_video_info(
     opts,
+    folder_path,
     folder_name,
 ):
     frame_paths = sorted(
-        glob.glob(os.path.join(opts.pp_path, folder_name, "frames/*.*"))
+        glob.glob(os.path.join(folder_path, folder_name, "frames/*.*"))
     )
-    face_paths = sorted(glob.glob(os.path.join(opts.pp_path, folder_name, "faces/*.*")))
-    deca_path = os.path.join(opts.pp_path, folder_name, "deca_params.npy")
-    face_bool_path = os.path.join(opts.pp_path, folder_name, "face_bool.npy")
-    mel_path = os.path.join(opts.pp_path, folder_name, "mel.npy")
-    tfm_inv_path = os.path.join(opts.pp_path, folder_name, "tfm_inv.npy")
+    face_paths = sorted(glob.glob(os.path.join(folder_path, folder_name, "faces/*.*")))
+    deca_path = os.path.join(folder_path, folder_name, "deca_params.npy")
+    face_bool_path = os.path.join(folder_path, folder_name, "face_bool.npy")
+    mel_path = os.path.join(folder_path, folder_name, "mel.npy")
+    tfm_inv_path = os.path.join(folder_path, folder_name, "tfm_inv.npy")
     return (
         frame_paths,
         face_paths,
@@ -114,7 +115,7 @@ def video_save(opts):
     # )
     # result
     os.system(
-        f"ffmpeg -y -i {os.path.join(opts.save_path, 'result_frames')}/%06d.png -i {os.path.join(opts.video_path, opts.dv_name+'.mp4')} -r {opts.fps} -map 0:v -map 1:a -vb 20M -y {opts.save_path}/../result_videos/{opts.sv_name}_{opts.dv_name}.mp4"
+        f"ffmpeg -y -i {os.path.join(opts.save_path, 'result_frames')}/%06d.png -i {os.path.join(opts.video_path, opts.dv_name+'.mp4')} -ss 0 -to {opts.min_duration/25} -r {opts.fps} -map 0:v -map 1:a -vb 20M -y {opts.save_path}/../result_videos/{opts.sv_name}_{opts.dv_name}.mp4"
     )
     # test
 

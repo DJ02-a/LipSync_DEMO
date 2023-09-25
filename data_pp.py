@@ -80,8 +80,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # path options
-    parser.add_argument("--video_path", type=str, default="./assets/demo_crop_videos")
-    parser.add_argument("--pp_save_root", type=str, default="./assets/demo_crop_pp")
+    parser.add_argument(
+        "--video_path", type=str, default="../../AssetSpace/DEMO_driving_video"
+    )
+    parser.add_argument("--pp_save_root", type=str, default="./assets/demo_driving_pp")
 
     # video options
     parser.add_argument("--fps", type=int, default=25)
@@ -106,14 +108,16 @@ if __name__ == "__main__":
     #         )
 
     video_file_paths = sorted(glob.glob(args.video_path + "/*.*"))
-
     # video_file_paths = ["assets/test_videos/RD_Radio34_008.mp4"]
     for i, video_file_path in enumerate(video_file_paths):
-        work = f"###  {os.path.basename(video_file_path)} ({str(i+1)}/{len(video_file_paths)})  ###"
-        print("#" * len(work))
-        print(work)
-        print("#" * len(work))
-        args.video_file_path = video_file_path
-        args = util.setting_pp_init(args)
-        video_pp(args, FA_3D, DC)
-        audio_pp(args)
+        try:
+            work = f"###  {os.path.basename(video_file_path)} ({str(i+1)}/{len(video_file_paths)})  ###"
+            print("#" * len(work))
+            print(work)
+            print("#" * len(work))
+            args.video_file_path = video_file_path
+            args = util.setting_pp_init(args)
+            video_pp(args, FA_3D, DC)
+            audio_pp(args)
+        except:
+            continue
